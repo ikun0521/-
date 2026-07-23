@@ -49,6 +49,10 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         导出数据
                     </button>
+                    <button onclick="openImportModal()" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        人工导入
+                    </button>
                 </div>
             </div>
         </div>
@@ -230,10 +234,61 @@
         </div>
     </div>
 
-    <script>
-        const API_BASE = 'https://1457331256-fzm5g5fw61.ap-guangzhou.tencentscf.com';
+    <!-- Import Modal -->
+    <div id="importModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-slate-900">人工导入招标信息</h2>
+                <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">项目名称 <span class="text-red-500">*</span></label>
+                    <input type="text" id="importName" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="请输入项目名称">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">招标单位 <span class="text-red-500">*</span></label>
+                    <input type="text" id="importUnit" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="请输入招标单位">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">产品类别</label>
+                    <input type="text" id="importCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="如：架车机、制动试验台">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">发布时间</label>
+                        <input type="date" id="importPublish" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">投标截止时间</label>
+                        <input type="text" id="importDeadline" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="如：2026-08-01 14:00">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">优先级</label>
+                    <select id="importPriority" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                        <option value="高">高</option>
+                        <option value="中" selected>中</option>
+                        <option value="低">低</option>
+                    </select>
+                </div>
+                <div class="bg-slate-50 rounded-lg px-4 py-3 text-sm text-slate-500">
+                    <p>一手平台将自动设为「人工」，无公告链接。</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                <button onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">取消</button>
+                <button onclick="submitImport()" class="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">确认导入</button>
+            </div>
+        </div>
+    </div>
 
-        const tenders = [
+    <script>
+        const API_BASE = 'https://1457331256-984dniw11b.ap-guangzhou.tencentscf.com';
+
+        let tenders = [
             {
                         "id": 1,
                         "name": "四方所地铁（固定式架车机举升单元机械生产委外）服务框架项目2026071530采购公告",
@@ -709,7 +764,8 @@
             "北京市公共资源交易中心": "https://ggzyfw.beijing.gov.cn",
             "上海地铁采购平台": "https://eps.shmetro.com",
             "深圳地铁智能招采管理平台": "https://cg.shenzhenmc.com",
-            "青岛市公共资源交易电子服务系统": "https://ggzyjy.shandong.gov.cn"
+            "青岛市公共资源交易电子服务系统": "https://ggzyjy.shandong.gov.cn",
+            "人工": "#"
 };
 
         let currentFilter = 'all';
@@ -776,6 +832,109 @@
 
         let statuses = {};
         let keywords = [];
+        let manualTenders = [];
+
+        // API: load manual tenders
+        async function loadManualTenders() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/tenders`);
+                return resp.ok ? await resp.json() : [];
+            } catch (e) {
+                console.warn('无法加载人工导入的招标信息', e);
+                return [];
+            }
+        }
+
+        // API: save a new manual tender
+        async function saveManualTender(tender) {
+            try {
+                const resp = await fetch(`${API_BASE}/api/tenders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tender)
+                });
+                return resp.ok ? await resp.json() : [];
+            } catch (e) {
+                console.warn('无法保存人工导入的招标信息', e);
+                return null;
+            }
+        }
+
+        // API: delete a manual tender by id
+        async function deleteManualTender(id) {
+            try {
+                await fetch(`${API_BASE}/api/tenders`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+            } catch (e) {
+                console.warn('无法删除人工导入的招标信息', e);
+            }
+        }
+
+        // Merge manual tenders into the main array
+        function mergeManualTenders() {
+            // Remove old manual tenders, then re-add
+            tenders = tenders.filter(t => t.platform !== '人工');
+            manualTenders.forEach(t => tenders.push(t));
+            // Re-sort
+            tenders.sort((a, b) => {
+                if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                    return priorityOrder[a.priority] - priorityOrder[b.priority];
+                }
+                return new Date(b.publish) - new Date(a.publish);
+            });
+        }
+
+        // Import modal
+        function openImportModal() {
+            const modal = document.getElementById('importModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('importPublish').value = today;
+        }
+
+        function closeImportModal() {
+            const modal = document.getElementById('importModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function submitImport() {
+            const name = document.getElementById('importName').value.trim();
+            const unit = document.getElementById('importUnit').value.trim();
+            if (!name || !unit) {
+                alert('项目名称和招标单位不能为空');
+                return;
+            }
+            const tender = {
+                id: 'M' + Date.now(),
+                name: name,
+                unit: unit,
+                category: document.getElementById('importCategory').value.trim() || '未分类',
+                publish: document.getElementById('importPublish').value || new Date().toISOString().split('T')[0],
+                deadline: document.getElementById('importDeadline').value.trim() || '待确认',
+                link: '',
+                platform: '人工',
+                priority: document.getElementById('importPriority').value
+            };
+            const result = await saveManualTender(tender);
+            if (result) {
+                manualTenders = result;
+                mergeManualTenders();
+                renderTable();
+                updateStats();
+                initCharts();
+                // Clear form
+                ['importName', 'importUnit', 'importCategory', 'importDeadline'].forEach(id => document.getElementById(id).value = '');
+                closeImportModal();
+            } else {
+                alert('导入失败，请重试');
+            }
+        }
 
         function getReviewState(id) {
             return statuses[id] || '待查阅';
@@ -976,16 +1135,22 @@
                         <td class="col-publish px-4 py-4 whitespace-nowrap table-text text-slate-600">${t.publish}</td>
                         <td class="col-deadline px-4 py-4 whitespace-nowrap table-text text-slate-600">${t.deadline}</td>
                         <td class="col-platform px-4 py-4 whitespace-nowrap">
-                            <a href="${platformUrl[t.platform] || '#'}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:text-emerald-800 transition-colors">
-                                ${t.platform}
-                                <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                            </a>
+                            ${t.platform === '人工' 
+                                ? `<span class="table-text inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-amber-50 text-amber-700 border border-amber-200">${t.platform}</span>`
+                                : `<a href="${platformUrl[t.platform] || '#'}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:text-emerald-800 transition-colors">
+                                    ${t.platform}
+                                    <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                </a>`
+                            }
                         </td>
                         <td class="col-link px-4 py-4 whitespace-nowrap">
-                            <a href="${t.link}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                                查看公告
-                                <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                            </a>
+                            ${t.link 
+                                ? `<a href="${t.link}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                                    查看公告
+                                    <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                </a>`
+                                : `<span class="table-text text-slate-300">—</span>`
+                            }
                         </td>
                         <td class="w-[130px] min-w-[130px] px-4 py-4 whitespace-nowrap">
                             <button data-id="${t.id}" class="state-btn table-text inline-flex items-center px-3 py-1.5 rounded-lg font-medium transition-colors ${REVIEW_BUTTON_CLASS[state]}">
@@ -1013,6 +1178,8 @@
             animateCount('pendingCount', reviewCounts['待查阅']);
             animateCount('reviewedCount', reviewCounts['已查阅']);
             animateCount('followUpCount', reviewCounts['待跟进']);
+            const totalEl = document.getElementById('totalCount');
+            if (totalEl) totalEl.textContent = tenders.length;
         }
 
         function animateCount(id, target) {
@@ -1149,6 +1316,8 @@
         document.addEventListener('DOMContentLoaded', async () => {
             statuses = await loadStatuses();
             keywords = await loadKeywords();
+            manualTenders = await loadManualTenders();
+            mergeManualTenders();
             renderKeywords();
             renderTable();
             updateStats();
