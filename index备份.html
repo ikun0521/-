@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>招标信息可视化看板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        .priority-high { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #991b1b; border: 1px solid #fca5a5; }
+        .priority-medium { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; border: 1px solid #fbbf24; }
+        .priority-low { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); color: #1e40af; border: 1px solid #93c5fd; }
+        .card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+        .table-row { transition: background-color 0.2s; }
+        .table-row:hover { background-color: #f8fafc; }
+        .fade-in { animation: fadeIn 0.6s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .count-up { font-variant-numeric: tabular-nums; }
+        .col-priority { width: 72px; min-width: 72px; }
+        .col-name { min-width: 320px; max-width: 420px; }
+        .col-unit { min-width: 240px; max-width: 340px; }
+        .col-category { width: 120px; min-width: 120px; }
+        .col-publish { width: 100px; min-width: 100px; }
+        .col-deadline { width: 180px; min-width: 180px; }
+        .col-platform { width: 150px; min-width: 150px; }
+        .col-link { width: 100px; min-width: 100px; }
+        .table-text { font-size: 0.9375rem; line-height: 1.5rem; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <div class="mb-8 fade-in">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">招标信息可视化看板</h1>
+                    <p class="mt-2 text-slate-500">按优先级从高到低排序 · 共 <span id="totalCount" class="font-semibold text-slate-700">44</span> 条招标信息</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-sm text-slate-500">最近更新：2026-07-22 10:50</span>
+                    <button onclick="markAllAsRead()" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        全部标记已阅
+                    </button>
+                    <button onclick="exportTable()" class="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        导出数据
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Keywords Management -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 fade-in" style="animation-delay: 0.08s">
+            <button id="keywordsToggle" onclick="toggleKeywordsPanel()" class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-50 transition-colors rounded-2xl focus:outline-none">
+                <span class="text-lg font-semibold text-slate-900">📋 关键词管理（共 <span id="keywordsCount">0</span> 个）</span>
+                <span id="keywordsArrow" class="text-slate-500 transition-transform duration-300 transform">▶</span>
+            </button>
+            <div id="keywordsBody" class="overflow-hidden transition-all duration-300 ease-in-out" style="max-height: 0; opacity: 0;">
+                <div class="px-5 pb-5">
+                    <p class="text-sm text-slate-500 mb-3">用于高亮或筛选关注的招标信息</p>
+                    <div id="keywordsContainer" class="flex flex-wrap gap-2 mb-4">
+                        <!-- Keywords will be inserted by JS -->
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="keywordInput" placeholder="输入关键词..." class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all">
+                        <button onclick="addKeyword()" class="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">添加</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 fade-in" style="animation-delay: 0.1s">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">高优先级</p>
+                        <p class="text-3xl font-bold text-red-600 mt-1 count-up" id="highCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">需重点关注与跟进</p>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">中优先级</p>
+                        <p class="text-3xl font-bold text-amber-600 mt-1 count-up" id="mediumCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">持续跟踪评估</p>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">低优先级</p>
+                        <p class="text-3xl font-bold text-blue-600 mt-1 count-up" id="lowCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">常规关注即可</p>
+            </div>
+        </div>
+
+        <!-- Review Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 fade-in" style="animation-delay: 0.15s">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">待查阅</p>
+                        <p class="text-3xl font-bold text-red-600 mt-1 count-up" id="pendingCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                        <span class="text-xl">🔴</span>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">尚未查看的招标信息</p>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">已查阅</p>
+                        <p class="text-3xl font-bold text-green-600 mt-1 count-up" id="reviewedCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                        <span class="text-xl">🟢</span>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">已查看的招标信息</p>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">待跟进</p>
+                        <p class="text-3xl font-bold text-purple-600 mt-1 count-up" id="followUpCount">0</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                        <span class="text-xl">🟣</span>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-400 mt-3">需要重点跟进的项目</p>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 fade-in" style="animation-delay: 0.2s">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <h3 class="text-lg font-semibold text-slate-900 mb-4">优先级分布</h3>
+                <div class="h-64">
+                    <canvas id="priorityChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <h3 class="text-lg font-semibold text-slate-900 mb-4">产品类别 TOP5</h3>
+                <div class="h-64">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 mb-6 fade-in" style="animation-delay: 0.3s">
+            <div class="flex flex-col lg:flex-row gap-4">
+                <div class="flex-1">
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <input type="text" id="searchInput" placeholder="搜索项目名称、招标单位、产品类别或一手平台..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all">
+                    </div>
+                </div>
+                <div class="flex gap-2 flex-wrap items-center">
+                    <button onclick="filterByPriority('all')" class="filter-btn active px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-slate-900 text-white" data-priority="all">全部</button>
+                    <button onclick="filterByPriority('高')" class="filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-red-50" data-priority="高">高优先级</button>
+                    <button onclick="filterByPriority('中')" class="filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-amber-50" data-priority="中">中优先级</button>
+                    <button onclick="filterByPriority('低')" class="filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-blue-50" data-priority="低">低优先级</button>
+                    <span class="w-px h-6 bg-slate-300 mx-1"></span>
+                    <button onclick="filterByState('all')" class="state-filter-btn active px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-slate-900 text-white" data-state="all">全部状态</button>
+                    <button onclick="filterByState('待查阅')" class="state-filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-red-50" data-state="待查阅">待查阅</button>
+                    <button onclick="filterByState('已查阅')" class="state-filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-green-50" data-state="已查阅">已查阅</button>
+                    <button onclick="filterByState('待跟进')" class="state-filter-btn px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-purple-50" data-state="待跟进">待跟进</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden fade-in" style="animation-delay: 0.4s">
+            <div class="overflow-x-auto">
+                <table class="w-full" id="tenderTable">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="col-priority px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">优先级</th>
+                            <th class="col-name px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">项目名称</th>
+                            <th class="col-unit px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">招标单位</th>
+                            <th class="col-category px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">产品类别</th>
+                            <th class="col-publish px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">发布时间</th>
+                            <th class="col-deadline px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">投标截止时间</th>
+                            <th class="col-platform px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">一手平台</th>
+                            <th class="col-link px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">公告链接</th>
+                            <th class="w-[130px] min-w-[130px] px-4 py-4 text-left text-sm font-semibold text-slate-500 uppercase tracking-wider">状态操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100">
+                        <!-- Rows will be inserted by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="emptyState" class="hidden py-16 text-center">
+                <svg class="mx-auto w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <p class="mt-3 text-slate-500">未找到匹配的招标信息</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center text-sm text-slate-400 fade-in" style="animation-delay: 0.5s">
+            <p>数据来源：招标信息汇总.md | 生成时间：2026-07-22</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://1457331256-fzm5g5fw61.ap-guangzhou.tencentscf.com';
+
+        const tenders = [
+            {
+                        "id": 1,
+                        "name": "四方所地铁（固定式架车机举升单元机械生产委外）服务框架项目2026071530采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "固定式架车机",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/146664/index_21.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 2,
+                        "name": "四方所地铁（地坑架车机钢结构机械委外生产）服务框架项目2026071529采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "地坑架车机",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/146664/index_21.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 3,
+                        "name": "青岛市地铁2号线二期、7号线二期工程场段工艺设备集成包（首批）采购项目资格预审公告",
+                        "unit": "青岛地铁集团有限公司",
+                        "category": "移动式架车机组/数控不落轮车床/车辆检修专用设备",
+                        "publish": "2026-07-17",
+                        "deadline": "2026-07-30 09:30",
+                        "link": "https://ggzyjy.shandong.gov.cn/jsgczbgg/SAzE8t3jkpBI9q9ZyIrUEA.jhtml",
+                        "platform": "青岛市公共资源交易电子服务系统",
+                        "priority": "高"
+            },
+            {
+                        "id": 4,
+                        "name": "沈阳局集团公司长春车辆段微控单车试验器公开询价采购项目",
+                        "unit": "中国铁路沈阳局集团有限公司长春车辆段",
+                        "category": "微控单车试验器",
+                        "publish": "2026-07-14",
+                        "deadline": "待确认（见国铁采购平台）",
+                        "link": "https://wap.qianlima.com/gjxx/153406/index_14_0.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 5,
+                        "name": "丰台机务段真空主断路器维修技术服务项目招标公告",
+                        "unit": "中国铁路北京局集团有限公司丰台机务段",
+                        "category": "真空主断路器维修",
+                        "publish": "2026-07-13",
+                        "deadline": "2026-08-04 13:30",
+                        "link": "https://www.gc-zb.com/read-760038436.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 6,
+                        "name": "2026年广州铁道车辆有限公司软管风水压试验台采购公告",
+                        "unit": "广州铁道车辆有限公司",
+                        "category": "制动软管试验台",
+                        "publish": "2026-07-13",
+                        "deadline": "2026-07-23 14:00",
+                        "link": "https://www.zhiliaobiaoxun.cn/detail/598656018b128BD2E0Cc.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 7,
+                        "name": "大秦铁路2026年度车辆设备（台车自动吊钩、轴承压装机等）购置项目招标公告",
+                        "unit": "大秦铁路股份有限公司",
+                        "category": "轴承压装机",
+                        "publish": "2026-07-10",
+                        "deadline": "见国铁采购平台",
+                        "link": "https://www.szhbuy.com/m-web-202607105791634041.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 8,
+                        "name": "郑州局集团公司洛阳机务段移动式架车机购置公开采购项目招标公告",
+                        "unit": "中国铁路郑州局集团有限公司洛阳机务段",
+                        "category": "移动式架车机",
+                        "publish": "2026-07-10",
+                        "deadline": "待确认（见国铁采购平台）",
+                        "link": "https://wap.qianlima.com/gjxx/305020/index_10.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 9,
+                        "name": "上海动车段2026年调试车间移动式架车机大修服务采购招标公告",
+                        "unit": "中国铁路上海局集团有限公司上海动车段",
+                        "category": "移动式架车机大修",
+                        "publish": "2026-07-09",
+                        "deadline": "2026-07-29 09:00",
+                        "link": "http://www.gdtzb.com/g-zb-46568018.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 10,
+                        "name": "上海动车段2026年转向架车间轴承压装机大修服务采购招标公告",
+                        "unit": "中国铁路上海局集团有限公司上海动车段",
+                        "category": "轴承压装机大修",
+                        "publish": "2026-07-09",
+                        "deadline": "2026-07-29 10:30",
+                        "link": "http://www.gdtzb.com/g-zb-46567990.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 11,
+                        "name": "上海大机运用检修段2026年机械动力设备维保包件5电动架车机维保采购公告",
+                        "unit": "中国铁路上海局集团有限公司上海大机运用检修段",
+                        "category": "电动架车机维保",
+                        "publish": "2026-07-08",
+                        "deadline": "2026-07-29 14:00",
+                        "link": "https://www.zhiliaobiaoxun.cn/detail/598358609b199DA3AE4c.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 12,
+                        "name": "上海大机运用检修段2026年机械动力设备维保包件8移车台、电动落轮机维保采购公告",
+                        "unit": "中国铁路上海局集团有限公司上海大机运用检修段",
+                        "category": "电动落轮机维保",
+                        "publish": "2026-07-08",
+                        "deadline": "2026-07-29 14:00",
+                        "link": "https://sh.zhiliaobiaoxun.com/article/105446756",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 13,
+                        "name": "上海地铁维护保障有限公司车辆分公司2026年试验台类设备维修项目",
+                        "unit": "上海地铁维护保障有限公司车辆分公司",
+                        "category": "试验台类设备维修",
+                        "publish": "2026-07-08",
+                        "deadline": "2026-08-04 10:00（投标登记截止2026-07-15）",
+                        "link": "https://www.jiancezhaobiao.com/news-e7114da4f7a0919f9d44c095fa72c569",
+                        "platform": "上海地铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 14,
+                        "name": "郑州机务段\"2026年司机控制器试验台\"采购项目招标公告",
+                        "unit": "中国铁路郑州局集团有限公司郑州机务段",
+                        "category": "司机控制器试验台",
+                        "publish": "2026-07-07",
+                        "deadline": "2026-07-29 09:00",
+                        "link": "https://szhbuy.com/m-web-202607071892612825.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 15,
+                        "name": "上海局集团公司南京东车辆段两台微控120制动阀试验台大修采购公告",
+                        "unit": "中国铁路上海局集团有限公司南京东车辆段",
+                        "category": "制动阀试验台（120型）",
+                        "publish": "2026-07-07",
+                        "deadline": "待确认（见国铁采购平台）",
+                        "link": "https://www.cheliangzhaobiao.com/news-d9667b0ff9c534cf028889bd20e5aef3",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 16,
+                        "name": "中车哈尔滨车辆有限公司制动软管试验台维修2026070002采购公告",
+                        "unit": "中车哈尔滨车辆有限公司",
+                        "category": "制动软管试验台维修",
+                        "publish": "2026-07-07",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://aiqicha.baidu.com/tenderbidding/detail?dataId=af9d272e7a6e32e402781f60979a03290e2c114e",
+                        "platform": "中车购2.0平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 17,
+                        "name": "四方所-复兴号智能动车组充电机智能测试试验台-设备类竞标式询比采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "充电机逆变器试验台",
+                        "publish": "2026-07-06",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://www.bbda.com/bidDetail/78702a02e90be547d72de644ba58825cce6cc8e6fc5de46b8de0f2b243062098.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 18,
+                        "name": "西安动车段牵引电机试验站购置招标公告",
+                        "unit": "中国铁路西安局集团有限公司",
+                        "category": "牵引电机试验台",
+                        "publish": "2026-07-03",
+                        "deadline": "2026-07-24 14:30",
+                        "link": "https://szhbuy.com/m-web-202607033734404084.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 19,
+                        "name": "西安客车车辆段微控单车试验器购置招标公告",
+                        "unit": "中国铁路西安局集团有限公司",
+                        "category": "微控单车试验台",
+                        "publish": "2026-07-03",
+                        "deadline": "2026-07-27 14:30",
+                        "link": "https://www.zhiliaobiaoxun.cn/detail/597977939b1B8B2003Fc.html",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 20,
+                        "name": "齐车公司车钩实验用钩尾销等17项2026070009采购公告",
+                        "unit": "中车齐齐哈尔车辆有限公司",
+                        "category": "车钩试验设备配件",
+                        "publish": "2026-07-20",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/common/agents_info.jsp?id=33474659",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 21,
+                        "name": "四方所工装城铁司机台升降平台设备试工装标准2026071383采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "司机控制试验台（工装）",
+                        "publish": "2026-07-20",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/common/agents_info.jsp?id=33474659",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 22,
+                        "name": "济南四方所地铁（油压减震器试验台变频器）检测系统部件物资标准项目2026070984采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "油压减振器试验台配件",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/162611/index_21_0.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 23,
+                        "name": "济南四方所地铁（雄安油压减震器试验台位移传感器）传感器物资标准2026070985采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "油压减振器试验台配件",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/162611/index_21_0.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 24,
+                        "name": "济南四方所动车（成都动车段试验台改造伺服驱动器）智能制造物资标准项目2026071228采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "试验台改造配件",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/162611/index_21_0.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 25,
+                        "name": "济南四方所动车（成都动车段试验台升级改造）智能制造物资标准项目2026071230采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "试验台升级改造",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/162611/index_21_0.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 26,
+                        "name": "四方所地铁（固定式架车机机械安装）服务框架项目2026071532采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "固定式架车机安装",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/146664/index_21.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 27,
+                        "name": "四方所地铁（架修设备电气配盘委外生产）服务框架项目2026071540采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "架修设备电气",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/146664/index_21.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 28,
+                        "name": "四方所地铁（架修设备电气安装委外）服务框架项目2026071531采购公告",
+                        "unit": "中车青岛四方车辆研究所有限公司",
+                        "category": "架修设备电气安装",
+                        "publish": "2026-07-18",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://wap.qianlima.com/gjxx/146664/index_21.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 29,
+                        "name": "包头西机务段2026-034制动试验设备及小电机试验设备配件竞争性谈判采购",
+                        "unit": "中国铁路呼和浩特局集团有限公司包头西机务段",
+                        "category": "制动试验设备配件",
+                        "publish": "2026-07-17",
+                        "deadline": "待确认（见国铁采购平台）",
+                        "link": "https://wap.qianlima.com/gjxx/132233/index_18_0.html",
+                        "platform": "国铁采购平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 30,
+                        "name": "深铁运营既有线不落轮镟床及公铁两用车故障委外维修（2027-2029年度）项目采购公告",
+                        "unit": "深圳市地铁集团有限公司",
+                        "category": "不落轮镟床维修",
+                        "publish": "2026-07-15",
+                        "deadline": "2026-08-07 10:00",
+                        "link": "https://cg.shenzhenmc.com/zzbgg/113367.jhtml",
+                        "platform": "深圳地铁智能招采管理平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 31,
+                        "name": "北京市郊铁路东北环线工程第四批建管甲供物资（车辆基地设备）招标",
+                        "unit": "中国铁路北京局集团有限公司京南工程项目管理部",
+                        "category": "转向架更换设备/检修作业平台/不落轮镟床",
+                        "publish": "2026-07-10",
+                        "deadline": "见招标文件",
+                        "link": "https://ggzyfw.beijing.gov.cn/jylcgcjs/20260710/5619872.html",
+                        "platform": "北京市公共资源交易中心",
+                        "priority": "中"
+            },
+            {
+                        "id": 32,
+                        "name": "武昌客车车辆段动力集中动车组检修能力提升工程（含落轮机、不落轮镟床更新）",
+                        "unit": "中国铁路武汉局集团有限公司",
+                        "category": "落轮机更新/不落轮镟床",
+                        "publish": "2026-07-09",
+                        "deadline": "见招标文件",
+                        "link": "http://www.gdtzb.com/g-zb-46509607.html",
+                        "platform": "国铁采购平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 33,
+                        "name": "青岛中车四方轨道车辆有限公司转向架分厂2026年检测设备、制动机检修设备项修采购公告",
+                        "unit": "青岛中车四方轨道车辆有限公司",
+                        "category": "检测设备/制动机检修设备",
+                        "publish": "2026-07-07",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://www.jiancezhaobiao.com/news-7ecfe2b1636316877603d6d4e566c58e",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 34,
+                        "name": "上海地铁车辆架大修高速断路器委外维修项目采购公告",
+                        "unit": "上海地铁维护保障有限公司车辆分公司",
+                        "category": "高速断路器维修",
+                        "publish": "2026-07-07",
+                        "deadline": "待确认（见上海地铁采购平台）",
+                        "link": "https://zbcc.dlzb.com/",
+                        "platform": "上海地铁采购平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 35,
+                        "name": "西安客车车辆段固定设备大修（双轴不落轮车轮车床大修）招标公告",
+                        "unit": "中国铁路西安局集团有限公司",
+                        "category": "不落轮车轮车床大修",
+                        "publish": "2026-07-03",
+                        "deadline": "见国铁采购平台",
+                        "link": "https://szhbuy.com/m-web-202607031034738591.html",
+                        "platform": "国铁采购平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 36,
+                        "name": "襄阳中车电机技术有限公司轨交电机对拖试验台升级改造项目招标公告",
+                        "unit": "襄阳中车电机技术有限公司",
+                        "category": "牵引电机试验台（对拖）",
+                        "publish": "2026-07-03",
+                        "deadline": "2026-07-20 10:00（已截止）",
+                        "link": "https://www.chinazbcgou.com.cn/index/index/article?id=10494519",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 37,
+                        "name": "长沙2号线西延二期工程车辆检修作业平台采购公告",
+                        "unit": "宁波中车轨道交通装备有限公司",
+                        "category": "检修作业平台",
+                        "publish": "2026-07-01",
+                        "deadline": "待确认（见中车购2.0平台）",
+                        "link": "https://www.cheliangzhaobiao.com/news-7ed32c305c5c48d00df23d31722b70f5",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 38,
+                        "name": "重庆地铁5号线牵引电机整改项目招标公告",
+                        "unit": "中车永济电机有限公司",
+                        "category": "牵引电机整改",
+                        "publish": "2026-07-01",
+                        "deadline": "2026-07-22 09:00",
+                        "link": "https://www.dlzb.com/d-zb-67372315.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "中"
+            },
+            {
+                        "id": 39,
+                        "name": "上铁机辆公司上海辆鹰分公司卫生间检测试验台改造采购",
+                        "unit": "中国铁路上海局集团有限公司上铁机辆公司",
+                        "category": "试验台改造（卫生间）",
+                        "publish": "2026-07-15",
+                        "deadline": "待确认（见国铁采购平台）",
+                        "link": "https://www.gc-zb.com/read-760668286.html",
+                        "platform": "国铁采购平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 40,
+                        "name": "信息化产品综合测试台XXHCP-CS直接采购公示",
+                        "unit": "株洲中车时代电气股份有限公司",
+                        "category": "综合测试台",
+                        "publish": "2026-07-15",
+                        "deadline": "已直采（公示期）",
+                        "link": "https://wap.qianlima.com/gjxx/147127/index_13.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 41,
+                        "name": "株洲时代热磁科技轨道交通核心元器件生产线改造升级项目第三标段流阻测试台设备采购",
+                        "unit": "株洲中车时代电气股份有限公司（时代热磁科技）",
+                        "category": "流阻测试台",
+                        "publish": "2026-07-15",
+                        "deadline": "待确认（见招标文件）",
+                        "link": "https://wap.qianlima.com/gjxx/147127/index_13.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 42,
+                        "name": "深铁运营2026年度第263-1包备件（数控不落轮车轮车床系统）项目（第二次）",
+                        "unit": "深圳市地铁集团有限公司",
+                        "category": "不落轮镟床备件",
+                        "publish": "2026-07-03",
+                        "deadline": "2026-07-21 10:00（可能已截止）",
+                        "link": "https://cg.shenzhenmc.com/fcggggs/112838.jhtml",
+                        "platform": "深圳地铁智能招采管理平台",
+                        "priority": "低"
+            }
+
+];
+
+        const priorityOrder = { '高': 0, '中': 1, '低': 2 };
+        const priorityClass = { '高': 'priority-high', '中': 'priority-medium', '低': 'priority-low' };
+        const priorityLabel = { '高': '高', '中': '中', '低': '低' };
+        const priorityColor = { '高': '#dc2626', '中': '#d97706', '低': '#2563eb' };
+        const platformUrl = {
+            "中车购2.0平台": "https://www.crrcgo.cc",
+            "国铁采购平台": "https://cg.95306.cn",
+            "北京市公共资源交易中心": "https://ggzyfw.beijing.gov.cn",
+            "上海地铁采购平台": "https://eps.shmetro.com",
+            "深圳地铁智能招采管理平台": "https://cg.shenzhenmc.com",
+            "青岛市公共资源交易电子服务系统": "https://ggzyjy.shandong.gov.cn"
+};
+
+        let currentFilter = 'all';
+        let searchTerm = '';
+        let currentStateFilter = 'all';
+
+        // Review state management
+        const REVIEW_STATES = ['待查阅', '已查阅', '待跟进'];
+        const REVIEW_BUTTON_CLASS = {
+            '待查阅': 'bg-red-600 hover:bg-red-700 text-white',
+            '已查阅': 'bg-green-600 hover:bg-green-700 text-white',
+            '待跟进': 'bg-purple-600 hover:bg-purple-700 text-white'
+        };
+        const REVIEW_ROW_CLASS = {
+            '待查阅': 'bg-red-50',
+            '已查阅': '',
+            '待跟进': ''
+        };
+
+        // API functions
+        async function loadStatuses() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/statuses`);
+                return resp.ok ? await resp.json() : {};
+            } catch (e) {
+                console.warn('无法加载审阅状态', e);
+                return {};
+            }
+        }
+
+        async function saveStatuses(map) {
+            try {
+                await fetch(`${API_BASE}/api/statuses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(map)
+                });
+            } catch (e) {
+                console.warn('无法保存审阅状态', e);
+            }
+        }
+
+        async function loadKeywords() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/keywords`);
+                return resp.ok ? await resp.json() : [];
+            } catch (e) {
+                console.warn('无法加载关键词', e);
+                return [];
+            }
+        }
+
+        async function saveKeywords(arr) {
+            try {
+                await fetch(`${API_BASE}/api/keywords`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(arr)
+                });
+            } catch (e) {
+                console.warn('无法保存关键词', e);
+            }
+        }
+
+        let statuses = {};
+        let keywords = [];
+
+        function getReviewState(id) {
+            return statuses[id] || '待查阅';
+        }
+
+        function setReviewState(id, state) {
+            statuses[id] = state;
+            saveStatuses(statuses);
+        }
+
+        // Keyword management
+        let keywordsExpanded = false;
+
+        function updateKeywordsCount() {
+            const countEl = document.getElementById('keywordsCount');
+            if (countEl) countEl.textContent = keywords.length;
+        }
+
+        function setKeywordsPanelHeight(expanded) {
+            const body = document.getElementById('keywordsBody');
+            const arrow = document.getElementById('keywordsArrow');
+            if (!body || !arrow) return;
+            if (expanded) {
+                body.style.maxHeight = body.scrollHeight + 'px';
+                body.style.opacity = '1';
+                arrow.style.transform = 'rotate(90deg)';
+            } else {
+                body.style.maxHeight = '0';
+                body.style.opacity = '0';
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function toggleKeywordsPanel() {
+            keywordsExpanded = !keywordsExpanded;
+            setKeywordsPanelHeight(keywordsExpanded);
+        }
+
+        function renderKeywords() {
+            const container = document.getElementById('keywordsContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            updateKeywordsCount();
+            if (keywords.length === 0) {
+                container.innerHTML = '<span class="text-sm text-slate-400">暂无关键词</span>';
+                setKeywordsPanelHeight(keywordsExpanded);
+                return;
+            }
+            keywords.forEach((kw, index) => {
+                const tag = document.createElement('span');
+                tag.className = 'inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200';
+                tag.innerHTML = `
+                    <span>${escapeHtml(kw)}</span>
+                    <button onclick="removeKeyword(${index})" class="ml-1 p-0.5 hover:bg-blue-100 rounded-full transition-colors" title="删除">
+                        ✕
+                    </button>
+                `;
+                container.appendChild(tag);
+            });
+            // Recalculate height in case content changed
+            if (keywordsExpanded) {
+                setKeywordsPanelHeight(true);
+            }
+        }
+
+        async function addKeyword() {
+            const input = document.getElementById('keywordInput');
+            const value = input.value.trim();
+            if (!value) return;
+            if (keywords.includes(value)) {
+                alert('该关键词已存在');
+                return;
+            }
+            keywords.push(value);
+            input.value = '';
+            renderKeywords();
+            await saveKeywords(keywords);
+        }
+
+        async function removeKeyword(index) {
+            if (index < 0 || index >= keywords.length) return;
+            keywords.splice(index, 1);
+            renderKeywords();
+            await saveKeywords(keywords);
+        }
+
+        function cycleReviewState(id) {
+            const current = getReviewState(id);
+            const nextIndex = (REVIEW_STATES.indexOf(current) + 1) % REVIEW_STATES.length;
+            const nextState = REVIEW_STATES[nextIndex];
+            setReviewState(id, nextState);
+            return nextState;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function markAllAsRead() {
+            const currentTotal = tenders.length;
+            const pendingTotal = tenders.filter(t => getReviewState(t.id) === '待查阅').length;
+            if (pendingTotal === 0) {
+                alert('当前没有待查阅的招标信息。');
+                return;
+            }
+            if (!confirm(`确定要将全部 ${pendingTotal} 条待查阅信息标记为“已查阅”吗？`)) {
+                return;
+            }
+            tenders.forEach(t => {
+                if (getReviewState(t.id) === '待查阅') {
+                    setReviewState(t.id, '已查阅');
+                }
+            });
+            renderTable();
+            updateStats();
+        }
+
+        function filterByState(state) {
+            currentStateFilter = state;
+            document.querySelectorAll('.state-filter-btn').forEach(btn => {
+                if (btn.dataset.state === state) {
+                    btn.classList.add('bg-slate-900', 'text-white', 'border-slate-900');
+                    btn.classList.remove('text-slate-700', 'border-slate-300', 'hover:bg-red-50', 'hover:bg-green-50', 'hover:bg-purple-50');
+                } else {
+                    btn.classList.remove('bg-slate-900', 'text-white', 'border-slate-900');
+                    btn.classList.add('text-slate-700', 'border-slate-300');
+                }
+            });
+            renderTable();
+        }
+
+        // Sort by priority
+        tenders.sort((a, b) => {
+            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                return priorityOrder[a.priority] - priorityOrder[b.priority];
+            }
+            return new Date(b.publish) - new Date(a.publish);
+        });
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            const filtered = tenders.filter(t => {
+                const matchesPriority = currentFilter === 'all' || t.priority === currentFilter;
+                const matchesSearch = searchTerm === '' || 
+                    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.unit.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.platform.toLowerCase().includes(searchTerm.toLowerCase());
+                const state = getReviewState(t.id);
+                const matchesState = currentStateFilter === 'all' || state === currentStateFilter;
+                return matchesPriority && matchesSearch && matchesState;
+            });
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                filtered.forEach((t, index) => {
+                    const state = getReviewState(t.id);
+                    const rowHighlight = REVIEW_ROW_CLASS[state] || '';
+                    const tr = document.createElement('tr');
+                    tr.className = `table-row border-b border-slate-50 ${rowHighlight}`.trim();
+                    tr.style.animation = `fadeIn 0.4s ease-out ${index * 0.03}s both`;
+                    tr.innerHTML = `
+                        <td class="col-priority px-4 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${priorityClass[t.priority]}">
+                                ${priorityLabel[t.priority]}
+                            </span>
+                        </td>
+                        <td class="col-name px-4 py-4">
+                            <div class="table-text font-medium text-slate-900">${t.name}</div>
+                        </td>
+                        <td class="col-unit px-4 py-4">
+                            <div class="table-text text-slate-600">${t.unit}</div>
+                        </td>
+                        <td class="col-category px-4 py-4 whitespace-nowrap">
+                            <span class="table-text inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-slate-100 text-slate-700">
+                                ${t.category}
+                            </span>
+                        </td>
+                        <td class="col-publish px-4 py-4 whitespace-nowrap table-text text-slate-600">${t.publish}</td>
+                        <td class="col-deadline px-4 py-4 whitespace-nowrap table-text text-slate-600">${t.deadline}</td>
+                        <td class="col-platform px-4 py-4 whitespace-nowrap">
+                            <a href="${platformUrl[t.platform] || '#'}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:text-emerald-800 transition-colors">
+                                ${t.platform}
+                                <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                        </td>
+                        <td class="col-link px-4 py-4 whitespace-nowrap">
+                            <a href="${t.link}" target="_blank" rel="noopener noreferrer" class="table-text inline-flex items-center font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                                查看公告
+                                <svg class="ml-1 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            </a>
+                        </td>
+                        <td class="w-[130px] min-w-[130px] px-4 py-4 whitespace-nowrap">
+                            <button data-id="${t.id}" class="state-btn table-text inline-flex items-center px-3 py-1.5 rounded-lg font-medium transition-colors ${REVIEW_BUTTON_CLASS[state]}">
+                                ${state === '待查阅' ? '🔴' : state === '已查阅' ? '🟢' : '🟣'} ${state}
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        function updateStats() {
+            const counts = { '高': 0, '中': 0, '低': 0 };
+            const reviewCounts = { '待查阅': 0, '已查阅': 0, '待跟进': 0 };
+            tenders.forEach(t => {
+                counts[t.priority]++;
+                const state = getReviewState(t.id);
+                reviewCounts[state] = (reviewCounts[state] || 0) + 1;
+            });
+            
+            animateCount('highCount', counts['高']);
+            animateCount('mediumCount', counts['中']);
+            animateCount('lowCount', counts['低']);
+            animateCount('pendingCount', reviewCounts['待查阅']);
+            animateCount('reviewedCount', reviewCounts['已查阅']);
+            animateCount('followUpCount', reviewCounts['待跟进']);
+        }
+
+        function animateCount(id, target) {
+            const el = document.getElementById(id);
+            let current = 0;
+            const increment = target / 30;
+            const timer = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(timer);
+                }
+                el.textContent = Math.floor(current);
+            }, 20);
+        }
+
+        function filterByPriority(priority) {
+            currentFilter = priority;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.dataset.priority === priority) {
+                    btn.classList.add('bg-slate-900', 'text-white', 'border-slate-900');
+                    btn.classList.remove('text-slate-700', 'border-slate-300', 'hover:bg-red-50', 'hover:bg-amber-50', 'hover:bg-blue-50');
+                } else {
+                    btn.classList.remove('bg-slate-900', 'text-white', 'border-slate-900');
+                    btn.classList.add('text-slate-700', 'border-slate-300');
+                }
+            });
+            renderTable();
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchTerm = e.target.value;
+            renderTable();
+        });
+
+        function initCharts() {
+            const counts = { '高': 0, '中': 0, '低': 0 };
+            tenders.forEach(t => counts[t.priority]++);
+
+            // Priority distribution doughnut chart
+            new Chart(document.getElementById('priorityChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['高优先级', '中优先级', '低优先级'],
+                    datasets: [{
+                        data: [counts['高'], counts['中'], counts['低']],
+                        backgroundColor: ['#dc2626', '#d97706', '#2563eb'],
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { usePointStyle: true, padding: 20, font: { family: 'Noto Sans SC' } } }
+                    },
+                    cutout: '65%'
+                }
+            });
+
+            // Category TOP5 bar chart
+            const categoryCounts = {};
+            tenders.forEach(t => {
+                categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+            });
+            const sortedCategories = Object.entries(categoryCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            new Chart(document.getElementById('categoryChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedCategories.map(c => c[0]),
+                    datasets: [{
+                        label: '招标数量',
+                        data: sortedCategories.map(c => c[1]),
+                        backgroundColor: '#0f172a',
+                        borderRadius: 6,
+                        barThickness: 24
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Noto Sans SC' } }, grid: { color: '#f1f5f9' } },
+                        x: { ticks: { font: { family: 'Noto Sans SC', size: 11 }, maxRotation: 30, minRotation: 30 }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function exportTable() {
+            const filtered = tenders.filter(t => {
+                const matchesPriority = currentFilter === 'all' || t.priority === currentFilter;
+                const matchesSearch = searchTerm === '' || 
+                    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.unit.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.platform.toLowerCase().includes(searchTerm.toLowerCase());
+                const state = getReviewState(t.id);
+                const matchesState = currentStateFilter === 'all' || state === currentStateFilter;
+                return matchesPriority && matchesSearch && matchesState;
+            });
+
+            let csv = '\uFEFF优先级,项目名称,招标单位,产品类别,发布时间,投标截止时间,一手平台,审阅状态,公告链接\n';
+            filtered.forEach(t => {
+                const state = getReviewState(t.id);
+                csv += `${t.priority},"${t.name}","${t.unit}","${t.category}",${t.publish},"${t.deadline}","${t.platform}","${state}","${t.link}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `招标信息_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        // Delegated event listener for review state buttons
+        document.getElementById('tableBody').addEventListener('click', function(e) {
+            const btn = e.target.closest('.state-btn');
+            if (btn && btn.dataset.id) {
+                cycleReviewState(parseInt(btn.dataset.id, 10));
+                renderTable();
+                updateStats();
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            statuses = await loadStatuses();
+            keywords = await loadKeywords();
+            renderKeywords();
+            renderTable();
+            updateStats();
+            initCharts();
+        });
+    </script>
+</body>
+</html>
