@@ -1,0 +1,7 @@
+name = "tender-backend"
+main = "server.js"
+compatibility_date = "2024-12-18"
+
+[[kv_namespaces]]
+binding = "TENDER_DB"
+id = "283db72f526a41ddb7a9f47b91bb400c" 

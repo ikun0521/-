@@ -1,52 +1,104 @@
-const jsonServer = require('json-server');
-const cors = require('cors');
-const server = jsonServer.create();
-const router = jsonServer.router('db.json');
-const middlewares = jsonServer.defaults();
-const port = process.env.PORT || 3000;
+// Cloudflare Workers 兼容版
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
 
-// 启用 CORS（允许前端跨域请求）
-server.use(cors());
+    // CORS 预检
+    if (method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
+      });
+    }
 
-// 使用默认中间件（日志、静态文件等）
-server.use(middlewares);
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
 
-// 自定义路由：获取所有状态
-server.get('/api/statuses', (req, res) => {
-  const db = router.db.get('statuses').value();
-  res.json(db);
-});
+    // ========== GET /api/statuses ==========
+    if (path === '/api/statuses' && method === 'GET') {
+      try {
+        const data = await env.TENDER_DB.get('statuses', 'json');
+        return new Response(JSON.stringify(data || {}), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
 
-// 自定义路由：更新状态（合并更新）
-server.post('/api/statuses', (req, res) => {
-  const newStatuses = req.body;
-  const current = router.db.get('statuses').value();
-  const updated = { ...current, ...newStatuses };
-  router.db.set('statuses', updated).write();
-  res.json(updated);
-});
+    // ========== POST /api/statuses ==========
+    if (path === '/api/statuses' && method === 'POST') {
+      try {
+        const newStatuses = await request.json();
+        const current = await env.TENDER_DB.get('statuses', 'json') || {};
+        const updated = { ...current, ...newStatuses };
+        await env.TENDER_DB.put('statuses', JSON.stringify(updated));
+        return new Response(JSON.stringify(updated), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
 
-// 自定义路由：获取关键词列表
-server.get('/api/keywords', (req, res) => {
-  const keywords = router.db.get('keywords').value();
-  res.json(keywords);
-});
+    // ========== GET /api/keywords ==========
+    if (path === '/api/keywords' && method === 'GET') {
+      try {
+        const keywords = await env.TENDER_DB.get('keywords', 'json');
+        return new Response(JSON.stringify(keywords || []), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
 
-// 自定义路由：更新关键词列表
-server.post('/api/keywords', (req, res) => {
-  const newKeywords = req.body;
-  if (!Array.isArray(newKeywords)) {
-    return res.status(400).json({ error: '关键词必须是数组' });
+    // ========== POST /api/keywords ==========
+    if (path === '/api/keywords' && method === 'POST') {
+      try {
+        const newKeywords = await request.json();
+        if (!Array.isArray(newKeywords)) {
+          return new Response(JSON.stringify({ error: '关键词必须是数组' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+        await env.TENDER_DB.put('keywords', JSON.stringify(newKeywords));
+        return new Response(JSON.stringify(newKeywords), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // ========== GET / ==========
+    if (path === '/') {
+      return new Response('🚀 招标看板后端已运行！', {
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders }
+      });
+    }
+
+    return new Response('Not Found', { status: 404, headers: corsHeaders });
   }
-  router.db.set('keywords', newKeywords).write();
-  res.json(newKeywords);
-});
-
-// 使用 json-server 默认路由（用于直接操作 db.json）
-server.use(router);
-
-server.listen(port, () => {
-  console.log(`🚀 后端服务已启动，端口：${port}`);
-  console.log(`📊 状态 API: GET/POST /api/statuses`);
-  console.log(`🔑 关键词 API: GET/POST /api/keywords`);
-});
+};
