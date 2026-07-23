@@ -1,0 +1,13 @@
+{
+  "name": "tender-backend",
+  "version": "1.0.0",
+  "description": "招标看板后端 API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "json-server": "^0.17.4",
+    "cors": "^2.8.5"
+  }
+}
