@@ -53,6 +53,30 @@
             </div>
         </div>
 
+        <!-- Keywords Management -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 fade-in" style="animation-delay: 0.08s">
+            <button id="keywordsToggle" onclick="toggleKeywordsPanel()" class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-50 transition-colors rounded-2xl focus:outline-none">
+                <span class="text-lg font-semibold text-slate-900">📋 关键词管理（共 <span id="keywordsCount">0</span> 个）</span>
+                <span id="keywordsArrow" class="text-slate-500 transition-transform duration-300 transform">▶</span>
+            </button>
+            <div id="keywordsBody" class="overflow-hidden transition-all duration-300 ease-in-out" style="max-height: 0; opacity: 0;">
+                <div class="px-5 pb-5">
+                    <p class="text-sm text-slate-500 mb-3">用于下次获取招标信息的关键词</p>
+                    <div id="keywordsContainer" class="flex flex-wrap gap-2 mb-4">
+                        <!-- Keywords will be inserted by JS -->
+                    </div>
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="keywordInput" placeholder="输入关键词..." class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all">
+                        <button onclick="addKeyword()" class="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors">添加</button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="confirmKeywords()" class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-colors shadow-sm">确认修改</button>
+                        <span id="keywordSyncMessage" class="hidden text-sm font-medium text-green-700">✅ 关键词已同步</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Statistics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 fade-in" style="animation-delay: 0.1s">
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 card-hover">
@@ -207,6 +231,8 @@
     </div>
 
     <script>
+        const API_BASE = 'https://1457331256-fzm5g5fw61.ap-guangzhou.tencentscf.com';
+
         const tenders = [
             {
                         "id": 1,
@@ -691,7 +717,6 @@
         let currentStateFilter = 'all';
 
         // Review state management
-        const REVIEW_STORAGE_KEY = 'tenderReviewStates';
         const REVIEW_STATES = ['待查阅', '已查阅', '待跟进'];
         const REVIEW_BUTTON_CLASS = {
             '待查阅': 'bg-red-600 hover:bg-red-700 text-white',
@@ -704,32 +729,149 @@
             '待跟进': ''
         };
 
-        function loadReviewStates() {
+        // API functions
+        async function loadStatuses() {
             try {
-                const stored = localStorage.getItem(REVIEW_STORAGE_KEY);
-                return stored ? JSON.parse(stored) : {};
+                const resp = await fetch(`${API_BASE}/api/statuses`);
+                return resp.ok ? await resp.json() : {};
             } catch (e) {
+                console.warn('无法加载审阅状态', e);
                 return {};
             }
         }
 
-        function saveReviewStates(states) {
+        async function saveStatuses(map) {
             try {
-                localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(states));
+                await fetch(`${API_BASE}/api/statuses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(map)
+                });
             } catch (e) {
-                console.warn('无法保存审阅状态到 localStorage', e);
+                console.warn('无法保存审阅状态', e);
             }
         }
 
-        let reviewStates = loadReviewStates();
+        async function loadKeywords() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/keywords`);
+                return resp.ok ? await resp.json() : [];
+            } catch (e) {
+                console.warn('无法加载关键词', e);
+                return [];
+            }
+        }
+
+        async function saveKeywords(arr) {
+            try {
+                await fetch(`${API_BASE}/api/keywords`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(arr)
+                });
+            } catch (e) {
+                console.warn('无法保存关键词', e);
+            }
+        }
+
+        let statuses = {};
+        let keywords = [];
 
         function getReviewState(id) {
-            return reviewStates[id] || '待查阅';
+            return statuses[id] || '待查阅';
         }
 
         function setReviewState(id, state) {
-            reviewStates[id] = state;
-            saveReviewStates(reviewStates);
+            statuses[id] = state;
+            saveStatuses(statuses);
+        }
+
+        // Keyword management
+        let keywordsExpanded = false;
+
+        function updateKeywordsCount() {
+            const countEl = document.getElementById('keywordsCount');
+            if (countEl) countEl.textContent = keywords.length;
+        }
+
+        function setKeywordsPanelHeight(expanded) {
+            const body = document.getElementById('keywordsBody');
+            const arrow = document.getElementById('keywordsArrow');
+            if (!body || !arrow) return;
+            if (expanded) {
+                body.style.maxHeight = body.scrollHeight + 'px';
+                body.style.opacity = '1';
+                arrow.style.transform = 'rotate(90deg)';
+            } else {
+                body.style.maxHeight = '0';
+                body.style.opacity = '0';
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function toggleKeywordsPanel() {
+            keywordsExpanded = !keywordsExpanded;
+            setKeywordsPanelHeight(keywordsExpanded);
+        }
+
+        function renderKeywords() {
+            const container = document.getElementById('keywordsContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            updateKeywordsCount();
+            if (keywords.length === 0) {
+                container.innerHTML = '<span class="text-sm text-slate-400">暂无关键词</span>';
+                setKeywordsPanelHeight(keywordsExpanded);
+                return;
+            }
+            keywords.forEach((kw, index) => {
+                const tag = document.createElement('span');
+                tag.className = 'inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200';
+                tag.innerHTML = `
+                    <span>${escapeHtml(kw)}</span>
+                    <button onclick="removeKeyword(${index})" class="ml-1 p-0.5 hover:bg-blue-100 rounded-full transition-colors" title="删除">
+                        ✕
+                    </button>
+                `;
+                container.appendChild(tag);
+            });
+            // Recalculate height in case content changed
+            if (keywordsExpanded) {
+                setKeywordsPanelHeight(true);
+            }
+        }
+
+        function addKeyword() {
+            const input = document.getElementById('keywordInput');
+            const value = input.value.trim();
+            if (!value) return;
+            if (keywords.includes(value)) {
+                alert('该关键词已存在');
+                return;
+            }
+            keywords.push(value);
+            input.value = '';
+            renderKeywords();
+        }
+
+        function removeKeyword(index) {
+            if (index < 0 || index >= keywords.length) return;
+            keywords.splice(index, 1);
+            renderKeywords();
+        }
+
+        async function confirmKeywords() {
+            await saveKeywords(keywords);
+            showKeywordSyncMessage();
+        }
+
+        function showKeywordSyncMessage() {
+            const msg = document.getElementById('keywordSyncMessage');
+            if (!msg) return;
+            msg.classList.remove('hidden');
+            setTimeout(() => {
+                msg.classList.add('hidden');
+            }, 2000);
         }
 
         function cycleReviewState(id) {
@@ -1004,9 +1146,14 @@
         });
 
         // Initialize
-        renderTable();
-        updateStats();
-        initCharts();
+        document.addEventListener('DOMContentLoaded', async () => {
+            statuses = await loadStatuses();
+            keywords = await loadKeywords();
+            renderKeywords();
+            renderTable();
+            updateStats();
+            initCharts();
+        });
     </script>
 </body>
 </html>
