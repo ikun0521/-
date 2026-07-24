@@ -343,61 +343,6 @@ async function fetchPageText(url) {
   }
 }
 
-function resolveUrl(url, baseUrl) {
-  try {
-    return new URL(url, baseUrl).href;
-  } catch {
-    return null;
-  }
-}
-
-function findFirstHandUrl(html, sourceUrl) {
-  const text = stripHtml(html);
-  // 1. 从文本中提取常见一手平台域名
-  const urlRe = /https?:\/\/[\w.-]+(?:\/[\w./?%&=+#-]*)?/gi;
-  const allUrls = [...text.matchAll(urlRe)].map((m) => m[0]).filter(Boolean);
-  for (const p of FIRST_HAND_DOMAINS) {
-    const matches = allUrls.filter((u) => u.includes(p.domain));
-    if (matches.length) {
-      const longest = matches.sort((a, b) => b.length - a.length)[0];
-      const resolved = resolveUrl(longest, sourceUrl);
-      if (resolved && resolved !== sourceUrl) return { url: resolved, platform: p.name };
-    }
-  }
-
-  // 2. 从 href 中提取
-  const hrefRe = /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  const candidates = [];
-  while ((m = hrefRe.exec(html))) {
-    const href = m[1];
-    const anchorText = stripHtml(m[2]);
-    const resolved = resolveUrl(href, sourceUrl);
-    if (!resolved) continue;
-    for (const p of FIRST_HAND_DOMAINS) {
-      if (resolved.includes(p.domain)) {
-        candidates.push({ url: resolved, platform: p.name, text: anchorText });
-      }
-    }
-  }
-  if (candidates.length) {
-    const preferred = candidates.find((c) => /公告|详情|进入|查看|原文/.test(c.text));
-    const pick = preferred || candidates[0];
-    if (pick.url !== sourceUrl) return pick;
-  }
-
-  return null;
-}
-
-function isHomepageOnly(url) {
-  try {
-    const u = new URL(url);
-    return u.pathname === '/' || u.pathname === '';
-  } catch {
-    return true;
-  }
-}
-
 function isCaptchaPage(html, url) {
   const text = stripHtml(html).replace(/\s+/g, ' ');
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -413,6 +358,148 @@ function isReasonableDateStr(dateStr) {
   if (isNaN(d.getTime())) return false;
   const year = d.getFullYear();
   return year >= 2024 && year <= 2027;
+}
+
+const UNIT_BLACKLIST = [
+  '不予受理', '将予以拒收', '点击查看', '招标编号', '招标估价', '招标代理机构', '采购代理机构',
+  '代理', '项目名称', '采购联系人', '报名截止', '未送达', '逾期送达', '拒收', '详见', '见附件',
+  '无', '待定', '招标公告', '采购公告', '请 注册 查看', '注册 查看', '地 址', '地址',
+  '及其所属单位', '及实际需求企业', '关于本项目', '应及时向', '符合国家及国家', '侵权投诉',
+  '原设备的维修', '维修义务', '有关规定期限执行', '（盖章）', '盖章', '将于', '网上发布',
+  '补充（答疑、澄清）', '答疑、澄清', '投标', '对采购标的物产品质量处罚', '不允许参加该标的物的投标',
+  '取消招标资格', '处罚期内的供应商', '相应处理的', '对上述费用均不承担任何责任',
+  '不承担任何责任', '对上述', '及上级母公司列入黑名单', '列入黑名单', '上级母公司',
+  '因质量', '履约', '廉洁', '负面影响', '产品质量'
+];
+
+const UNIT_SUFFIX_RE = /(?:公司|集团|局|段|所|厂|院|中心|部|处|分公司|有限公司|股份公司|指挥部|办公室|分公司)$/;
+
+function isValidUnit(unit) {
+  if (!unit) return false;
+  const s = unit.trim();
+  if (s.length < 4 || s.length > 50) return false;
+  if (/^[的为：:\s]/.test(s)) return false;
+  if (/^\d/.test(s)) return false;
+  if (/[,，。；：！？*]/.test(s)) return false;
+  if (/\s{2,}/.test(s)) return false;
+  if (/\d{4,}/.test(s)) return false;          // 过滤银行账号、联行号等
+  if (/202[4-7]年/.test(s)) return false;     // 过滤误抓的日期句
+  if (!UNIT_SUFFIX_RE.test(s)) return false;  // 必须以组织机构后缀结尾
+  return !UNIT_BLACKLIST.some((w) => s.includes(w));
+}
+
+function cleanUnit(s) {
+  if (!s) return '';
+  return s
+    .replace(/^[的为：:\s]+/, '')
+    .replace(/\s*(?:招标代理机构|采购代理机构|代理|联系地址|详细地址|地\s*址|电\s*话|邮\s*编|传\s*真|开\s*户|招标中心|联行号|户名|开户行|银行账号|账号|采购单位|发布|补充|项目编号|项目名称|采购联系人|报名截止时间|报名|售价|文件|截止时间|时间|条件|要求|详见|附件).*$/, '')
+    .replace(/[\s]+/g, ' ')
+    .replace(/\d+$/, '')
+    .trim();
+}
+
+function normalizeUnitText(text) {
+  if (!text) return '';
+  return text
+    .replace(/招\s*标\s*人/g, '招标人')
+    .replace(/采\s*购\s*人/g, '采购人')
+    .replace(/采\s*购\s*单\s*位\s*名\s*称/g, '采购单位名称')
+    .replace(/地\s*址/g, '地址')
+    .replace(/电\s*话/g, '电话')
+    .replace(/邮\s*编/g, '邮编')
+    .replace(/开\s*户/g, '开户');
+}
+
+function extractUnitByLabel(text) {
+  if (!text) return '';
+  const normalized = normalizeUnitText(text);
+  const labelRe = /(?:招标人|采购人|采购单位名称|招标单位|采购单位|招标人为|采购人为|项目单位|建设单位|业主单位)[：:为]?\s*([\u4e00-\u9fa5（）()][^,，.。;；:：!！?？\n\r]{2,50}?)(?=[,，.。;；:：!！?？\n\r]|\s*(?:招标代理机构|采购代理机构|代理|联系地址|详细地址|地址|电话|邮编|传真|开户|招标中心|联行号|户名|开户行|银行账号|账号|采购单位|发布|补充|项目编号|项目名称|采购联系人|报名截止时间|报名|售价|文件|截止时间|时间|条件|要求|详见|附件))/gi;
+  const entrustRe = /受\s*([\u4e00-\u9fa5（）()][^,，.。;；:：!！?？\n\r]{2,50}?)\s*委托/gi;
+  let best = '';
+  let m;
+  while ((m = labelRe.exec(normalized)) !== null) {
+    const candidate = cleanUnit(m[1]);
+    if (isValidUnit(candidate) && candidate.length > best.length) best = candidate;
+  }
+  while ((m = entrustRe.exec(normalized)) !== null) {
+    const candidate = cleanUnit(m[1]);
+    if (isValidUnit(candidate) && candidate.length > best.length) best = candidate;
+  }
+  return best;
+}
+
+function extractUnitFromTitle(title) {
+  if (!title) return '';
+  const patterns = [
+    /中国铁路[\u4e00-\u9fa5]+局集团有限公司[\u4e00-\u9fa5]+(?:段|所|厂|车间|分公司|处)/,
+    /中国铁路[\u4e00-\u9fa5]+局集团有限公司/,
+    /中国铁路[\u4e00-\u9fa5]+局集团[\u4e00-\u9fa5]+(?:段|所|厂|车间|分公司|处)/,
+    /[\u4e00-\u9fa5]+(?:局集团|局集团公司)[\u4e00-\u9fa5]+(?:段|所|厂|车间|分公司|处)/,
+    /[\u4e00-\u9fa5]+局[\u4e00-\u9fa5]+(?:段|所|厂|车间|分公司|处)/,
+    /[\u4e00-\u9fa5]+(?:有限公司|股份公司|集团)[\u4e00-\u9fa5]*(?:段|所|厂|车间|分公司|处|部|中心)/,
+    /中车[\u4e00-\u9fa5]+(?:有限公司|股份公司|集团有限公司|集团)/,
+    /[\u4e00-\u9fa5]+地铁[\u4e00-\u9fa5]*(?:有限公司|分公司|集团)/,
+    /安徽江淮汽车[\u4e00-\u9fa5]*(?:有限公司|集团|股份公司)/,
+    /天津轨道交通[\u4e00-\u9fa5]*(?:有限公司|集团)/,
+    /^([\u4e00-\u9fa5]+?)(?:202[4-7]|\d{4}年)/,
+  ];
+  for (const re of patterns) {
+    const m = title.match(re);
+    if (m) {
+      const s = m[0].replace(/(?:采购|招标)?公告$/, '').trim();
+      if (isValidUnit(s)) return s;
+    }
+  }
+  return '';
+}
+
+function unitQualityScore(s) {
+  if (!s) return -1;
+  const nonChinese = (s.match(/[^\u4e00-\u9fa5]/g) || []).length;
+  // 优先中文多、特殊符号少的； hyphen/括号少量扣分
+  return s.length - nonChinese * 2;
+}
+
+function extractUnit(text, title) {
+  const fromLabel = extractUnitByLabel(text);
+  const fromTitle = extractUnitFromTitle(title || '');
+  if (!fromLabel) return fromTitle || '';
+  if (!fromTitle) return fromLabel;
+  return unitQualityScore(fromTitle) > unitQualityScore(fromLabel) ? fromTitle : fromLabel;
+}
+
+function detectPlatformByText(title, text, url) {
+  const combined = `${title || ''} ${text || ''} ${url || ''}`.toLowerCase();
+  const rules = [
+    { name: '国铁采购平台', kw: ['国铁采购平台', 'cg.95306.cn'] },
+    { name: '中车购2.0平台', kw: ['中车购', 'crrcgo.cc'] },
+    { name: '上海地铁采购平台', kw: ['上海地铁', 'eps.shmetro.com'] },
+    { name: '深圳地铁智能招采管理平台', kw: ['深圳地铁', '深铁运营', 'cg.shenzhenmc.com'] },
+    { name: '北京市公共资源交易中心', kw: ['北京公共资源', 'ggzyfw.beijing.gov.cn'] },
+    { name: '青岛市公共资源交易电子服务系统', kw: ['青岛公共资源', 'ggzyjy.shandong.gov.cn'] },
+    { name: '新疆公共资源交易网', kw: ['新疆公共资源', 'ggzy.xinjiang.gov.cn'] },
+    { name: '嘉兴市公共资源交易网', kw: ['嘉兴公共资源', 'jxszwsjb.jiaxing.gov.cn'] },
+    { name: '四川省公共资源交易信息网', kw: ['四川公共资源', 'ggzyjy.sc.gov.cn'] },
+    { name: '中国招标投标公共服务平台', kw: ['中国招标投标公共服务', 'chinabidding.cn', 'cebpubservice.com'] },
+    { name: '天津轨道交通集团', kw: ['天津轨道交通', '津铁科技', 'tjgdjt.com'] },
+    { name: '安徽江淮汽车集团', kw: ['江淮汽车', 'jac.com.cn'] },
+    { name: '千里马招标网', kw: ['千里马', 'qianlima.com'] },
+    { name: '电力招标网', kw: ['电力招标网', 'dlzb.com'] },
+    { name: '建设招标网', kw: ['建设招标网', 'coopaa.com'] },
+    { name: '知了标讯', kw: ['知了标讯', 'zhiliaobiaoxun.cn'] },
+    { name: '招标网', kw: ['招标网', 'zhaobiao.cn'] },
+    { name: '剑鱼标讯', kw: ['剑鱼标讯', 'jianyu360.cn'] },
+    { name: '检测招标网', kw: ['检测招标网', 'jiancezhaobiao.com'] },
+    { name: '商智荟招采', kw: ['商智荟', 'szhbuy.com'] },
+    { name: '中拓招标网', kw: ['中拓招标网', '86ztbb.com'] },
+    { name: '招标采购导航网', kw: ['招标采购导航', 'ccpc360.com'] },
+    { name: '标讯天下', kw: ['标讯天下', 'bidnews.cn'] },
+    { name: '安防招标网', kw: ['安防招标网', 'anfangzhaobiao.com'] },
+  ];
+  for (const r of rules) {
+    if (r.kw.some((k) => combined.includes(k))) return r.name;
+  }
+  return detectPlatform(url);
 }
 
 async function extractFromPage(html, url, keyword, candidateTitle, snippet = '') {
@@ -455,47 +542,19 @@ async function extractFromPage(html, url, keyword, candidateTitle, snippet = '')
   if (!publish) publish = new Date().toISOString().split('T')[0];
 
   // 招标单位
-  let unit = '';
-  const unitRe = /(?:招标人|采购人|招标单位|采购单位|招\s*标\s*人)[：:]?\s*([\u4e00-\u9fa5][\u4e00-\u9fa5a-zA-Z0-9()（）\s]{2,80})/i;
-  const unitMatch = combinedText.match(unitRe);
-  if (unitMatch) unit = unitMatch[1].trim();
+  const unit = extractUnit(combinedText, name);
 
   // 截止日期
-  let parsed = parseDeadline(combinedText, publish);
-  let deadline = parsed && parsed.value ? parsed.value : '待确认';
-  let finalUrl = url;
-  let platform = detectPlatform(url);
+  const parsed = parseDeadline(combinedText, publish);
+  const deadline = parsed && parsed.value ? parsed.value : '待确认';
 
-  // 尝试抓取一手平台链接
-  if (!isFirstHand(url)) {
-    const firstHand = findFirstHandUrl(html, url);
-    if (firstHand && !isHomepageOnly(firstHand.url)) {
-      log(`  发现一手平台链接: ${firstHand.platform} -> ${firstHand.url}`);
-      const fhHtml = await fetchPageText(firstHand.url);
-      if (fhHtml && !isCaptchaPage(fhHtml, firstHand.url)) {
-        const fhText = stripHtml(fhHtml);
-        const fhParsed = parseDeadline(fhText, publish);
-        if (fhParsed && fhParsed.value) {
-          deadline = fhParsed.value;
-          parsed = fhParsed;
-        }
-        finalUrl = firstHand.url;
-        platform = firstHand.platform;
-      } else {
-        if (fhHtml) log(`  一手平台页面为验证码/登录页，保留第三方页面信息，链接改为一手平台`);
-        // 使用一手平台链接，但保留第三方页面解析的 deadline/unit/publish
-        finalUrl = firstHand.url;
-        platform = firstHand.platform;
-      }
-    } else if (firstHand && isHomepageOnly(firstHand.url)) {
-      log(`  发现一手平台首页链接，忽略: ${firstHand.url}`);
-    }
-  }
+  // 平台：根据公告标题/正文/链接域名判断，公告链接保持原始来源
+  const platform = detectPlatformByText(name, combinedText, url);
 
   // 类别
   const category = keyword || '未分类';
 
-  return { name, unit, category, publish, deadline, link: finalUrl, platform };
+  return { name, unit, category, publish, deadline, link: url, platform };
 }
 
 function isFirstHand(url) {
