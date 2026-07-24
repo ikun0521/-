@@ -821,5 +821,14 @@ module.exports = {
   extractFromPage,
   assignPriority,
   isExcluded,
+  normalizeName,
+  detectPlatformByText,
+  detectPlatform,
+  isFirstHand,
+  normalizeDate,
+  fetchKeywords,
+  FIRST_HAND_DOMAINS,
+  THIRD_PARTY_DOMAINS,
+  PLATFORM_DOMAINS,
 };
 

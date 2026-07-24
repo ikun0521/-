@@ -37,10 +37,10 @@
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-slate-900 tracking-tight">招标信息可视化看板</h1>
-                    <p class="mt-2 text-slate-500">按优先级从高到低排序 · 共 <span id="totalCount" class="font-semibold text-slate-700">28</span> 条招标信息</p>
+                    <p class="mt-2 text-slate-500">按优先级从高到低排序 · 共 <span id="totalCount" class="font-semibold text-slate-700">34</span> 条招标信息</p>
                 </div>
                 <div class="flex items-center gap-3">
-                    <span class="text-sm text-slate-500">最近更新：2026-07-24 14:17</span>
+                    <span class="text-sm text-slate-500">最近更新：2026-07-24 15:12</span>
                     <button onclick="markAllAsRead()" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         全部标记已阅
@@ -596,6 +596,72 @@
                         "link": "https://www.jiancezhaobiao.com/news-fd34be002705df5781ee5a7bc2e5dcf0",
                         "platform": "中车购2.0平台",
                         "priority": "低"
+            },
+            {
+                        "id": 33,
+                        "name": "上海局集团有限公司上海大机运用检修段2026年机械动力设备维保包件8移车台,电动落轮机维保采购公告",
+                        "unit": "上海局集团有限公司上海大机运用检修段",
+                        "category": "落轮机",
+                        "publish": "2026-07-24",
+                        "deadline": "2026-07-29 14:00",
+                        "link": "https://sh.zhiliaobiaoxun.com/article/105446756",
+                        "platform": "国铁采购平台",
+                        "priority": "高"
+            },
+            {
+                        "id": 30,
+                        "name": "【招标公告】中国铁路上海局集团有限公司杭州北车辆段乔司检修车间风动架车机大修招标公告",
+                        "unit": "中国铁路上海局集团有限公司",
+                        "category": "架车机",
+                        "publish": "2026-06-05",
+                        "deadline": "2026-06-26 09:00",
+                        "link": "https://zhejiang.jianyu360.cn/jybx/20260606_26060559854290.html",
+                        "platform": "国铁采购平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 29,
+                        "name": "大齐公司25吨架车机2026050004采购公告",
+                        "unit": "中车齐齐哈尔车辆有限公司",
+                        "category": "架车机",
+                        "publish": "2026-05-08",
+                        "deadline": "2026-05-18 14:00",
+                        "link": "https://www.zhiliaobiaoxun.cn/detail/593192739b13C329DB6c.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 34,
+                        "name": "重庆四方所车钩试验台搬迁服务一般性询比2026030836采购公告",
+                        "unit": "",
+                        "category": "车钩试验台",
+                        "publish": "2026-04-01",
+                        "deadline": "2026-04-30",
+                        "link": "https://www.jiancezhaobiao.com/news-8242d9b4f6edc3bd6e9d6adb8854ce18/",
+                        "platform": "检测招标网",
+                        "priority": "低"
+            },
+            {
+                        "id": 31,
+                        "name": "锡铁运维3号线工艺转向架采购项目(二次公告)",
+                        "unit": "",
+                        "category": "工艺转向架",
+                        "publish": "2026-03-11",
+                        "deadline": "2026-03-17",
+                        "link": "https://scm.wxmetro.net:3000/Purchase/BiddingA/173907830",
+                        "platform": "无锡地铁采购平台",
+                        "priority": "低"
+            },
+            {
+                        "id": 32,
+                        "name": "断路器试验台项目2026010352采购式告",
+                        "unit": "",
+                        "category": "高速断路器试验台",
+                        "publish": "2026-01-23",
+                        "deadline": "2026-01-27",
+                        "link": "https://www.jianyu360.cn/nologin/content/SEEY1xrfzI_AjgvAmdxcFwoCycCFjJ0V3h0Pyg4PC4geFFzflpUChU.html",
+                        "platform": "中车购2.0平台",
+                        "priority": "低"
             }
         ];
         const priorityOrder = { '高': 0, '中': 1, '低': 2 };
@@ -604,17 +670,21 @@
         const priorityColor = { '高': '#dc2626', '中': '#d97706', '低': '#2563eb' };
         const platformUrl = {
             "中车购2.0平台": "https://www.crrcgo.cc",
+            "中车集团官网": "https://www.crrcgc.cc",
             "国铁采购平台": "https://cg.95306.cn",
             "北京市公共资源交易中心": "https://ggzyfw.beijing.gov.cn",
             "上海地铁采购平台": "https://eps.shmetro.com",
+            "无锡地铁采购平台": "https://scm.wxmetro.net",
             "深圳地铁智能招采管理平台": "https://cg.shenzhenmc.com",
             "青岛市公共资源交易电子服务系统": "https://ggzyjy.shandong.gov.cn",
             "新疆公共资源交易网": "https://ggzy.xinjiang.gov.cn",
             "嘉兴市公共资源交易网": "https://jxszwsjb.jiaxing.gov.cn",
             "四川省公共资源交易信息网": "https://ggzyjy.sc.gov.cn",
+            "广东省公共资源交易中心": "https://ggzyjy.gd.gov.cn",
             "中国招标投标公共服务平台": "https://www.chinabidding.cn",
             "天津轨道交通集团": "http://www.tjgdjt.com",
             "安徽江淮汽车集团": "https://www.jac.com.cn",
+            "中国铁路物资采购平台": "https://www.zgdlyzc.com",
             "千里马招标网": "https://www.qianlima.com",
             "电力招标网": "https://www.dlzb.com",
             "建设招标网": "https://www.coopaa.com",
