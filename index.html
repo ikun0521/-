@@ -24,7 +24,7 @@
         .col-unit { min-width: 240px; max-width: 340px; }
         .col-category { width: 120px; min-width: 120px; }
         .col-publish { width: 100px; min-width: 100px; }
-        .col-deadline { width: 180px; min-width: 180px; }
+        .col-deadline { width: 160px; min-width: 160px; }
         .col-platform { width: 150px; min-width: 150px; }
         .col-link { width: 100px; min-width: 100px; }
         .table-text { font-size: 0.9375rem; line-height: 1.5rem; }
@@ -263,7 +263,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">投标截止时间</label>
-                        <input type="text" id="importDeadline" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="如：2026-08-01 14:00">
+                        <input type="datetime-local" id="importDeadline" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
                     </div>
                 </div>
                 <div>
@@ -427,7 +427,7 @@
                         "unit": "上海地铁维护保障有限公司车辆分公司",
                         "category": "试验台类设备维修",
                         "publish": "2026-07-08",
-                        "deadline": "2026-08-04 10:00（投标登记截止2026-07-15）",
+                        "deadline": "2026-08-04 10:00",
                         "link": "https://www.jiancezhaobiao.com/news-e7114da4f7a0919f9d44c095fa72c569",
                         "platform": "上海地铁采购平台",
                         "priority": "高"
@@ -713,7 +713,7 @@
                         "unit": "襄阳中车电机技术有限公司",
                         "category": "牵引电机试验台（对拖）",
                         "publish": "2026-07-03",
-                        "deadline": "2026-07-20 10:00（已截止）",
+                        "deadline": "2026-07-20 10:00",
                         "link": "https://www.chinazbcgou.com.cn/index/index/article?id=10494519",
                         "platform": "中车购2.0平台",
                         "priority": "中"
@@ -745,7 +745,7 @@
                         "unit": "中车长春轨道客车股份有限公司",
                         "category": "转向架小件加工",
                         "publish": "2026-07-18",
-                        "deadline": "2026-07-22 09:00（已截止）",
+                        "deadline": "2026-07-22 09:00",
                         "link": "https://www.dlzb.com/d-zb-67875959.html",
                         "platform": "中车购2.0平台",
                         "priority": "低",
@@ -756,7 +756,7 @@
                         "unit": "中车南京浦镇车辆有限公司",
                         "category": "转向架动应力试验",
                         "publish": "2026-07-17",
-                        "deadline": "2026-07-22 16:00（已截止）",
+                        "deadline": "2026-07-22 16:00",
                         "link": "https://www.cheliangzhaobiao.com/news-80ad15b2be041fdb86b78bec3334b378",
                         "platform": "中车购2.0平台",
                         "priority": "低",
@@ -812,7 +812,7 @@
                         "unit": "深圳市地铁集团有限公司",
                         "category": "不落轮镟床备件",
                         "publish": "2026-07-03",
-                        "deadline": "2026-07-21 10:00（可能已截止）",
+                        "deadline": "2026-07-21 10:00",
                         "link": "https://cg.shenzhenmc.com/fcggggs/112838.jhtml",
                         "platform": "深圳地铁智能招采管理平台",
                         "priority": "低"
@@ -981,7 +981,7 @@
                 unit: unit,
                 category: document.getElementById('importCategory').value.trim() || '未分类',
                 publish: document.getElementById('importPublish').value || new Date().toISOString().split('T')[0],
-                deadline: document.getElementById('importDeadline').value.trim() || '待确认',
+                deadline: (document.getElementById('importDeadline').value.trim().replace('T', ' ').replace(/:\d{2}$/, '') || '待确认'),
                 link: '',
                 platform: '人工',
                 priority: document.getElementById('importPriority').value
