@@ -14,9 +14,11 @@ const RULES = [
     name: 'bid',
     label: '投标/开标截止',
     patterns: [
-      /投标(?:文件)?(?:递交|截止|提交|开启)时间[：:]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
-      /开标时间[：:]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
-      /响应(?:文件)?(?:递交|截止|提交)时间[：:]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
+      /投标(?:文件)?(?:递交|截止|提交|开启)(?:的)?(?:截止|时间)[^\d]*?(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
+      /报价文件(?:递交|截止|提交)(?:的)?(?:截止|时间)[^\d]*?(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
+      /开标时间[^\d]*?(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
+      /谈判时间[^\d]*?(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
+      /响应(?:文件)?(?:递交|截止|提交)(?:的)?(?:截止|时间)[^\d]*?(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/gi,
     ],
   },
   {
@@ -28,10 +30,8 @@ const RULES = [
   },
 ];
 
-const FALLBACK_DATE_RE = new RegExp(
-  `\\b(${DATE_TIME_CAPTURE})\\b`,
-  'g'
-);
+const FALLBACK_DATE_RE =
+  /(?<!\d)\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?(?!\d)/g;
 
 function pad(n) {
   return n.toString().padStart(2, '0');
@@ -52,10 +52,34 @@ function formatDateLocal(date, includeTime) {
 
 function parseDateString(str) {
   if (!str) return null;
-  const cleaned = str
+  // 预处理：把 "2026 年 7月1 日 09时 0 0分" 这种带空格的写法规范化
+  let cleaned = str
     .replace(/[\s]+/g, ' ')
     .trim()
     .replace(/日(?=\s|$)/g, '');
+
+  // 保护“日”与“时/分”之间的空格，避免被下面的数字合并误删
+  const TIME_BOUNDARY = '\u0000';
+  cleaned = cleaned.replace(
+    /(\d{1,2})\s+(?=\d{1,2}[:时])/g,
+    '$1' + TIME_BOUNDARY
+  );
+
+  // 规范化中文年月日时分中的空格：202 6 年 -> 2026年，7月1 日 -> 7月1日，09时 0 0分 -> 09:00
+  // 先移除数字之间的空格，避免“202 6”被拆散
+  let prev;
+  do {
+    prev = cleaned;
+    cleaned = cleaned.replace(/(\d)\s+(\d)/g, (_, a, b) => a + b);
+  } while (cleaned !== prev);
+
+  // 恢复受保护的日期-时间边界空格
+  cleaned = cleaned.replace(new RegExp(TIME_BOUNDARY, 'g'), ' ');
+
+  cleaned = cleaned
+    .replace(/(\d{4})年(\d{1,2})月(\d{1,2})/g, '$1-$2-$3')
+    .replace(/(\d{1,2})时(\d{1,2})分/g, '$1:$2');
+
   const m = cleaned.match(
     /^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
   );
@@ -83,10 +107,30 @@ function normalizeMatchedDate(str) {
   return formatDateLocal(date, hasTime);
 }
 
+function normalizeDateText(text) {
+  if (!text || typeof text !== 'string') return '';
+  // 先把常见的“带空格中文日期/时间”压缩成常规写法
+  // 例如：202 6 年 7月1 日 8 时 30 分 -> 2026年7月1日8时30分
+  let result = text.replace(/[\s]+/g, ' ');
+  let prev;
+  do {
+    prev = result;
+    result = result.replace(/(\d)\s+(\d)/g, (_, a, b) => a + b);
+  } while (result !== prev);
+  // 再去除数字与“年/月/日/时/分”之间的空格
+  result = result
+    .replace(/(\d)\s*年\s*(\d)/g, '$1年$2')
+    .replace(/(\d)\s*月\s*(\d)/g, '$1月$2')
+    .replace(/(\d)\s*日\s*(\d)/g, '$1日 $2')
+    .replace(/(\d)\s*时\s*(\d)/g, '$1时$2')
+    .replace(/(\d)\s*分/g, '$1分');
+  return result;
+}
+
 function cleanDeadlineText(text) {
   if (!text || typeof text !== 'string') return '';
   return text
-    .replace(/[（(].*?[）)]/g, ' ')
+    .replace(/[（(）)]/g, ' ')
     .replace(/\b待确认\b|\b见招标文件\b|\b已直采\b/g, ' ')
     .replace(/[\s]+/g, ' ')
     .trim();
@@ -95,6 +139,7 @@ function cleanDeadlineText(text) {
 function extractByRules(text) {
   for (const rule of RULES) {
     for (const re of rule.patterns) {
+      re.lastIndex = 0;
       const matches = [...text.matchAll(re)];
       for (const match of matches) {
         const normalized = normalizeMatchedDate(match[1]);
@@ -108,8 +153,9 @@ function extractByRules(text) {
 }
 
 function extractFallback(text, publishDate) {
+  FALLBACK_DATE_RE.lastIndex = 0;
   const all = [...text.matchAll(FALLBACK_DATE_RE)]
-    .map((m) => normalizeMatchedDate(m[1]))
+    .map((m) => normalizeMatchedDate(m[0]))
     .filter(Boolean);
   if (!all.length) return null;
   const publishTs = publishDate ? new Date(publishDate).getTime() : 0;
@@ -135,7 +181,8 @@ function parseDeadline(text, publishDate) {
   if (!text || typeof text !== 'string') {
     return { value: null, source: null };
   }
-  const cleaned = cleanDeadlineText(text);
+  const normalized = normalizeDateText(text);
+  const cleaned = cleanDeadlineText(normalized);
   const byRules = extractByRules(cleaned);
   if (byRules) return byRules;
   return extractFallback(cleaned, publishDate);
@@ -148,7 +195,8 @@ function parseDeadline(text, publishDate) {
  */
 function normalizeDeadlineText(text) {
   if (!text || typeof text !== 'string') return null;
-  const cleaned = cleanDeadlineText(text);
+  const normalized = normalizeDateText(text);
+  const cleaned = cleanDeadlineText(normalized);
   const byRules = extractByRules(cleaned);
   if (byRules) return byRules.value;
   const fallback = extractFallback(cleaned, null);
@@ -171,4 +219,6 @@ module.exports = {
   isNormalizedDeadline,
   formatDateLocal,
   parseDateString,
+  normalizeDateText,
+  cleanDeadlineText,
 };

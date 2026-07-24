@@ -25,17 +25,38 @@ const KEYWORDS_FILE = path.join(ROOT, '产品关键词.txt');
 const API_BASE = 'https://1457331256-984dniw11b.ap-guangzhou.tencentscf.com';
 
 const EXCLUDED_TERMS = ['驾校', '汽车驾驶', '客车租赁', '租车', '驾驶培训'];
-const PLATFORM_DOMAINS = [
-  { domain: 'crrcgo.cc', name: '中车购2.0平台' },
+const FIRST_HAND_DOMAINS = [
   { domain: 'cg.95306.cn', name: '国铁采购平台' },
-  { domain: 'ggzyfw.beijing.gov.cn', name: '北京市公共资源交易中心' },
-  { domain: 'eps.shmetro.com', name: '上海地铁采购平台' },
+  { domain: 'crrcgo.cc', name: '中车购2.0平台' },
   { domain: 'cg.shenzhenmc.com', name: '深圳地铁智能招采管理平台' },
+  { domain: 'eps.shmetro.com', name: '上海地铁采购平台' },
+  { domain: 'ggzyfw.beijing.gov.cn', name: '北京市公共资源交易中心' },
   { domain: 'ggzyjy.shandong.gov.cn', name: '青岛市公共资源交易电子服务系统' },
-  { domain: 'qianlima.com', name: '千里马招标网' },
+  { domain: 'ggzy.xinjiang.gov.cn', name: '新疆公共资源交易网' },
+  { domain: 'jxszwsjb.jiaxing.gov.cn', name: '嘉兴市公共资源交易网' },
+  { domain: 'ggzyjy.sc.gov.cn', name: '四川省公共资源交易信息网' },
   { domain: 'chinabidding.cn', name: '中国招标投标公共服务平台' },
   { domain: 'cebpubservice.com', name: '中国招标投标公共服务平台' },
+  { domain: 'tjgdjt.com', name: '天津轨道交通集团' },
+  { domain: 'jac.com.cn', name: '安徽江淮汽车集团' },
 ];
+
+const THIRD_PARTY_DOMAINS = [
+  { domain: 'qianlima.com', name: '千里马招标网' },
+  { domain: 'dlzb.com', name: '电力招标网' },
+  { domain: 'coopaa.com', name: '建设招标网' },
+  { domain: 'zhiliaobiaoxun.cn', name: '知了标讯' },
+  { domain: 'zhaobiao.cn', name: '招标网' },
+  { domain: 'jianyu360.cn', name: '剑鱼标讯' },
+  { domain: 'jiancezhaobiao.com', name: '检测招标网' },
+  { domain: '86ztbb.com', name: '中拓招标网' },
+  { domain: 'szhbuy.com', name: '商智荟招采' },
+  { domain: 'bidnews.cn', name: '标讯天下' },
+  { domain: 'ccpc360.com', name: '招标采购导航网' },
+  { domain: 'anfangzhaobiao.com', name: '安防招标网' },
+];
+
+const PLATFORM_DOMAINS = [...FIRST_HAND_DOMAINS, ...THIRD_PARTY_DOMAINS];
 
 const FIELD_ORDER = ['id', 'name', 'unit', 'category', 'publish', 'deadline', 'link', 'platform', 'priority'];
 
@@ -322,8 +343,90 @@ async function fetchPageText(url) {
   }
 }
 
-function extractFromPage(html, url, keyword, candidateTitle) {
+function resolveUrl(url, baseUrl) {
+  try {
+    return new URL(url, baseUrl).href;
+  } catch {
+    return null;
+  }
+}
+
+function findFirstHandUrl(html, sourceUrl) {
   const text = stripHtml(html);
+  // 1. 从文本中提取常见一手平台域名
+  const urlRe = /https?:\/\/[\w.-]+(?:\/[\w./?%&=+#-]*)?/gi;
+  const allUrls = [...text.matchAll(urlRe)].map((m) => m[0]).filter(Boolean);
+  for (const p of FIRST_HAND_DOMAINS) {
+    const matches = allUrls.filter((u) => u.includes(p.domain));
+    if (matches.length) {
+      const longest = matches.sort((a, b) => b.length - a.length)[0];
+      const resolved = resolveUrl(longest, sourceUrl);
+      if (resolved && resolved !== sourceUrl) return { url: resolved, platform: p.name };
+    }
+  }
+
+  // 2. 从 href 中提取
+  const hrefRe = /<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  const candidates = [];
+  while ((m = hrefRe.exec(html))) {
+    const href = m[1];
+    const anchorText = stripHtml(m[2]);
+    const resolved = resolveUrl(href, sourceUrl);
+    if (!resolved) continue;
+    for (const p of FIRST_HAND_DOMAINS) {
+      if (resolved.includes(p.domain)) {
+        candidates.push({ url: resolved, platform: p.name, text: anchorText });
+      }
+    }
+  }
+  if (candidates.length) {
+    const preferred = candidates.find((c) => /公告|详情|进入|查看|原文/.test(c.text));
+    const pick = preferred || candidates[0];
+    if (pick.url !== sourceUrl) return pick;
+  }
+
+  return null;
+}
+
+function isHomepageOnly(url) {
+  try {
+    const u = new URL(url);
+    return u.pathname === '/' || u.pathname === '';
+  } catch {
+    return true;
+  }
+}
+
+function isCaptchaPage(html, url) {
+  const text = stripHtml(html).replace(/\s+/g, ' ');
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch ? stripHtml(titleMatch[1]).trim() : '';
+  // 国铁采购平台常见验证码页标题为"公告详情"且正文极短
+  if (title === '公告详情' && text.length < 800) return true;
+  if (/验证码|captcha|滑动验证|请完成验证|访问验证|安全验证/.test(text)) return true;
+  return false;
+}
+
+function isReasonableDateStr(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const year = d.getFullYear();
+  return year >= 2024 && year <= 2027;
+}
+
+async function extractFromPage(html, url, keyword, candidateTitle, snippet = '') {
+  let text = stripHtml(html);
+  // 如果是一手平台但返回验证码/登录页，则主要依赖 snippet
+  if (isFirstHand(url) && isCaptchaPage(html, url)) {
+    if (!snippet) {
+      log(`  一手平台页面为验证码且无 snippet，跳过: ${url}`);
+      return null;
+    }
+    log(`  一手平台页面为验证码，使用 snippet 提取信息: ${url}`);
+    text = snippet;
+  }
+  const combinedText = text + '\n' + snippet;
 
   // 标题：优先使用搜索结果传入的标题，fallback 到页面 title/h1
   let name = '';
@@ -339,32 +442,69 @@ function extractFromPage(html, url, keyword, candidateTitle) {
   // 发布时间
   let publish = null;
   const pubRe = /(?:发布|公告|采购)时间[：:]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?)/i;
-  const pubMatch = text.match(pubRe);
+  const pubMatch = combinedText.match(pubRe);
   if (pubMatch) publish = normalizeDate(pubMatch[1]);
   if (!publish) {
-    // 取正文中第一个合理日期
-    const firstDate = text.match(/\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?/);
-    if (firstDate) publish = normalizeDate(firstDate[0]);
+    // 取正文中第一个合理的日期（过滤版权等旧日期）
+    const allDates = [...combinedText.matchAll(/\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?/g)]
+      .map((m) => normalizeDate(m[0]))
+      .filter(Boolean)
+      .filter(isReasonableDateStr);
+    if (allDates.length) publish = allDates[0];
   }
   if (!publish) publish = new Date().toISOString().split('T')[0];
 
   // 招标单位
   let unit = '';
   const unitRe = /(?:招标人|采购人|招标单位|采购单位|招\s*标\s*人)[：:]?\s*([\u4e00-\u9fa5][\u4e00-\u9fa5a-zA-Z0-9()（）\s]{2,80})/i;
-  const unitMatch = text.match(unitRe);
+  const unitMatch = combinedText.match(unitRe);
   if (unitMatch) unit = unitMatch[1].trim();
 
   // 截止日期
-  const parsed = parseDeadline(text, publish);
-  const deadline = parsed.value || '待确认';
+  let parsed = parseDeadline(combinedText, publish);
+  let deadline = parsed && parsed.value ? parsed.value : '待确认';
+  let finalUrl = url;
+  let platform = detectPlatform(url);
 
-  // 平台
-  const platform = detectPlatform(url);
+  // 尝试抓取一手平台链接
+  if (!isFirstHand(url)) {
+    const firstHand = findFirstHandUrl(html, url);
+    if (firstHand && !isHomepageOnly(firstHand.url)) {
+      log(`  发现一手平台链接: ${firstHand.platform} -> ${firstHand.url}`);
+      const fhHtml = await fetchPageText(firstHand.url);
+      if (fhHtml && !isCaptchaPage(fhHtml, firstHand.url)) {
+        const fhText = stripHtml(fhHtml);
+        const fhParsed = parseDeadline(fhText, publish);
+        if (fhParsed && fhParsed.value) {
+          deadline = fhParsed.value;
+          parsed = fhParsed;
+        }
+        finalUrl = firstHand.url;
+        platform = firstHand.platform;
+      } else {
+        if (fhHtml) log(`  一手平台页面为验证码/登录页，保留第三方页面信息，链接改为一手平台`);
+        // 使用一手平台链接，但保留第三方页面解析的 deadline/unit/publish
+        finalUrl = firstHand.url;
+        platform = firstHand.platform;
+      }
+    } else if (firstHand && isHomepageOnly(firstHand.url)) {
+      log(`  发现一手平台首页链接，忽略: ${firstHand.url}`);
+    }
+  }
 
   // 类别
   const category = keyword || '未分类';
 
-  return { name, unit, category, publish, deadline, link: url, platform };
+  return { name, unit, category, publish, deadline, link: finalUrl, platform };
+}
+
+function isFirstHand(url) {
+  try {
+    const host = new URL(url).hostname;
+    return FIRST_HAND_DOMAINS.some((p) => host.includes(p.domain));
+  } catch {
+    return false;
+  }
 }
 
 function normalizeDate(str) {
@@ -414,6 +554,8 @@ function assignPriority(tender, keyword) {
   const remaining = daysUntil(tender.deadline);
   const name = tender.name;
   const exactMatch = keyword && name.includes(keyword);
+  // 已截止的标优先级降低
+  if (remaining !== null && remaining < 0) return '低';
   if (remaining !== null && remaining <= 7 && exactMatch) return '高';
   if ((remaining !== null && remaining <= 30) || exactMatch) return '中';
   return '低';
@@ -546,8 +688,8 @@ async function main() {
     if (!c.url) continue;
     const pageHtml = await fetchPageText(c.url);
     if (!pageHtml) continue;
-    const info = extractFromPage(pageHtml, c.url, c.keyword || c.category || '', c.title);
-    if (!info.name) continue;
+    const info = await extractFromPage(pageHtml, c.url, c.keyword || c.category || '', c.title, c.snippet || '');
+    if (!info || !info.name) continue;
     if (isExcluded(info.name + ' ' + (c.snippet || ''))) continue;
 
     const key = `${normalizeName(info.name)}|${info.publish}`;
